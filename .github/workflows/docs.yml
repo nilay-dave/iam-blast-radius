@@ -1,0 +1,32 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install
+        run: |
+          pip install -e ".[dev]"
+          pip install mkdocs-material
+      - name: Generate the example report the docs link to
+        run: |
+          ibr generate --principals 2000 --out data/generated/docs.json --seed 7
+          ibr analyse --account data/generated/docs.json \
+            --out docs/report.html --json docs/reachability.json
+      - name: Build and deploy
+        run: mkdocs gh-deploy --force
