@@ -1,0 +1,8 @@
+# Default owner for everything in this repository.
+*       @__GITHUB_USERNAME__
+
+# The two files the tool's correctness rests on. An incomplete edge list means a
+# principal wrongly reported contained; a wrong Deny evaluation means a
+# principal wrongly reported administrative.
+/src/ibr/graph/edges.py     @__GITHUB_USERNAME__
+/src/ibr/account/model.py   @__GITHUB_USERNAME__

@@ -1,0 +1,45 @@
+name: Bug report
+description: The analysis reported a wrong path, missed one, or crashed.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not paste real policy documents, principal ARNs or account
+        ids. A minimal synthetic account that reproduces the behaviour is both
+        safer and more useful, and `ibr generate` produces one.
+
+  - type: dropdown
+    id: direction
+    attributes:
+      label: Which direction
+      description: |
+        A missed path is the serious one. This tool deliberately over reports
+        rather than under reports, so a path that turns out to be blocked by a
+        condition or a permission boundary is documented behaviour; see ADR-003.
+      options:
+        - A path exists and was not reported
+        - A path was reported that cannot exist, and not because of a condition
+        - A principal was reported administrative and is not
+        - A principal was not reported administrative and is
+        - Crash or error
+        - Performance
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: A synthetic account and the exact command.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `ibr --version`.
+    validations:
+      required: true

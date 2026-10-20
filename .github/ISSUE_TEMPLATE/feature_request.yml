@@ -1,0 +1,24 @@
+name: Feature request
+description: Suggest a capability this tool should have.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What reachability question you cannot currently answer.
+    validations:
+      required: true
+
+  - type: textarea
+    id: edge
+    attributes:
+      label: If this is a new escalation edge
+      description: |
+        Name the actions it requires and say why holding them grants the
+        target's privileges rather than merely touching it. An edge without a
+        rationale will not be merged; see CONTRIBUTING.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
