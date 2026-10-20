@@ -1,0 +1,7 @@
+# Keep the language bar honest. The IAM policy fixtures and the compose and CI
+# definitions are a real part of this work, not incidental.
+*.yml   linguist-detectable=true
+*.yaml  linguist-detectable=true
+*.json  linguist-detectable=true
+Dockerfile linguist-detectable=true
+docs/** linguist-documentation=true

@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+site/
+data/generated/
+
+# Generated on every docs deploy; a committed copy is only ever a stale one.
+docs/report.html
+docs/reachability.json
