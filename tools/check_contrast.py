@@ -31,9 +31,9 @@ PAIRS = [
     ("muted", "bg", AA_BODY, "secondary text on the page"),
     ("muted", "panel", AA_BODY, "secondary text on a panel"),
     ("bad", "panel", AA_LARGE, "the headline figure"),
-    ("bad", "bg", AA_BODY, "not tunable labels"),
-    ("ok", "bg", AA_BODY, "tunable labels"),
-    ("muted", "bg", AA_BODY, "unknown verdict labels"),
+    ("bad", "bg", AA_BODY, "admin status labels"),
+    ("warn", "bg", AA_BODY, "reaches-admin status labels"),
+    ("ok", "bg", AA_BODY, "contained status labels"),
     ("fg", "panel", AA_BODY, "text inside a panel"),
 ]
 
