@@ -32,7 +32,6 @@ class EdgeKind(StrEnum):
     PASS_ROLE_TO_LAMBDA = "pass_role_to_lambda"
     PASS_ROLE_TO_EC2 = "pass_role_to_ec2"
     UPDATE_ASSUME_ROLE_POLICY = "update_assume_role_policy"
-    SET_DEFAULT_POLICY_VERSION = "set_default_policy_version"
     ADD_USER_TO_GROUP = "add_user_to_group"
 
 
@@ -130,15 +129,6 @@ DEFINITIONS: tuple[EdgeDefinition, ...] = (
         ),
     ),
     EdgeDefinition(
-        kind=EdgeKind.SET_DEFAULT_POLICY_VERSION,
-        required_actions=("iam:SetDefaultPolicyVersion",),
-        technique="Roll a managed policy back to an older, more permissive version.",
-        rationale=(
-            "Requires an older version to exist and to be more permissive, which the account model "
-            "records per policy rather than assuming."
-        ),
-    ),
-    EdgeDefinition(
         kind=EdgeKind.ADD_USER_TO_GROUP,
         required_actions=("iam:AddUserToGroup",),
         technique="Add yourself to a more privileged group.",
@@ -148,17 +138,32 @@ DEFINITIONS: tuple[EdgeDefinition, ...] = (
 
 BY_KIND: dict[EdgeKind, EdgeDefinition] = {d.kind: d for d in DEFINITIONS}
 
-# Actions that are administrative on their own. A principal holding any of these
-# is treated as already at the top of the graph rather than one hop from it.
+# Actions that grant arbitrary privilege on their own. A principal able to
+# perform any of these is already at the top of the graph rather than one hop
+# from it.
+#
+# Every entry is a concrete API action, never a wildcard. An earlier version
+# included "*" and "iam:*", which is a category error with a real consequence:
+# "*" is not an action anybody can call, and asking whether a principal is
+# allowed the literal action "*" matches an Allow on "*" while an explicit Deny
+# on "iam:*" does not match it. PowerUserAccess, which is exactly Allow "*" plus
+# Deny "iam:*", was therefore reported as administrative. Concrete actions make
+# the Deny apply, because fnmatch("iam:attachuserpolicy", "iam:*") is true.
 ADMIN_EQUIVALENT_ACTIONS: frozenset[str] = frozenset(
     {
-        "*",
-        "iam:*",
-        "iam:CreateUser",
-        "iam:PutUserPolicy",
         "iam:AttachUserPolicy",
-        "iam:PutRolePolicy",
+        "iam:PutUserPolicy",
         "iam:AttachRolePolicy",
-        "organizations:*",
+        "iam:PutRolePolicy",
+        "iam:AttachGroupPolicy",
+        "iam:PutGroupPolicy",
+        "iam:CreatePolicyVersion",
     }
 )
+
+# Actions that let a principal raise its own privileges without touching any
+# other principal. These are not graph edges: an edge means "A obtains B's
+# privileges", and rolling a policy back to an older version grants the
+# principal more of its own. They are evaluated as self escalation when
+# deciding whether a principal is already administrative.
+SELF_ESCALATION_ACTIONS: frozenset[str] = frozenset({"iam:SetDefaultPolicyVersion"})
