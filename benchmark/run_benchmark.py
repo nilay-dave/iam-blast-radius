@@ -109,6 +109,12 @@ def main() -> int:
     parser.add_argument("--sizes", type=int, nargs="+", default=list(DEFAULT_SIZES))
     parser.add_argument("--repeats", type=int, default=REPEATS)
     parser.add_argument("--workdir", type=Path, default=Path("data/generated/bench"))
+    parser.add_argument(
+        "--merge", action="store_true",
+        help="Merge into existing results instead of replacing them, keyed by principal count. "
+             "The largest scenario takes twelve minutes to build, so re-running it to refresh a "
+             "small one wastes a quarter of an hour.",
+    )
     args = parser.parse_args()
 
     print(f"benchmarking {len(args.sizes)} account sizes, {args.repeats} repeats each")
@@ -116,6 +122,20 @@ def main() -> int:
 
     RESULTS.mkdir(parents=True, exist_ok=True)
     out = RESULTS / "benchmark.json"
+
+    if args.merge and out.exists():
+        existing = json.loads(out.read_text(encoding="utf-8"))
+        by_size = {s["principals"]: s for s in existing.get("scenarios", [])}
+        by_size.update({s["principals"]: s for s in payload["scenarios"]})
+        payload["scenarios"] = [by_size[key] for key in sorted(by_size)]
+        # Hardware and repeats describe the most recent run, and a merged file
+        # may hold scenarios measured under different repeat counts. Record
+        # that rather than implying one number covers all of them.
+        payload["merged"] = True
+        payload["repeats_note"] = (
+            "Scenarios may have been measured in separate runs; each carries its own repeat count."
+        )
+
     out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     print(f"\nwrote {out}")
     return 0
