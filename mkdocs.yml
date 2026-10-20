@@ -1,0 +1,46 @@
+site_name: iam-blast-radius
+site_description: Compute IAM privilege reachability and show which least-privilege roles still reach admin.
+repo_url: https://github.com/__GITHUB_USERNAME__/iam-blast-radius
+repo_name: __GITHUB_USERNAME__/iam-blast-radius
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      accent: indigo
+      toggle: { icon: material/weather-night, name: Switch to dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: indigo
+      toggle: { icon: material/weather-sunny, name: Switch to light mode }
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc: { permalink: true }
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Overview: index.md
+  - The escalation edges: edges.md
+  - Preparing a real account: real-accounts.md
+  - Decisions:
+      - ADR-001 Offline graph over the policy simulator: adr/adr-001-graph-over-policy-simulator.md
+      - ADR-002 One traversal, not a search per principal: adr/adr-002-one-traversal-not-a-search-per-principal.md
+      - ADR-003 Over report rather than under report: adr/adr-003-over-report-rather-than-under-report.md
+  - Example report: report.html
