@@ -167,16 +167,36 @@ Python 3.13 on Linux. Raw output is in `benchmark/results/benchmark.json`.
 | <!--number:performance.scenarios[1].principals-->0<!--/number--> | <!--number:performance.scenarios[1].edges-->0<!--/number--> | <!--number:performance.scenarios[1].build_median_s-->0<!--/number--> s | <!--number:performance.scenarios[1].analyse_median_s-->0<!--/number--> s | <!--number:performance.scenarios[1].mislabelled_pct-->0<!--/number--> % |
 | <!--number:performance.scenarios[2].principals-->0<!--/number--> | <!--number:performance.scenarios[2].edges-->0<!--/number--> | <!--number:performance.scenarios[2].build_median_s-->0<!--/number--> s | <!--number:performance.scenarios[2].analyse_median_s-->0<!--/number--> s | <!--number:performance.scenarios[2].mislabelled_pct-->0<!--/number--> % |
 
-The mislabelled percentage barely moves across two orders of magnitude, which is
-what makes it a usable headline: it describes the account's hygiene rather than
-its size.
+The mislabelled percentage barely moves across the range, which is what makes it
+a usable headline: it describes the account's hygiene rather than its size.
 
-Where it degrades: the ceiling is edge count, not principal count. An account
-where many principals hold wildcard scoped IAM write actions produces millions
-of edges and the build slows accordingly. That is a true property of the account
-rather than an artefact, and the graph is large precisely because the blast
-radius is large. For an account in that state the one hop count is the number
-worth acting on, and it is available long before the full graph matters.
+Reachability is effectively free at every size, because it is one traversal
+rather than a search per principal. Graph construction is the cost, and it grows
+with edges rather than with principals:
+
+| Principals | Edges | Edges per principal | Build |
+| --- | --- | --- | --- |
+| 2,177 | 112,493 | 52 | 7.0 s |
+| 5,443 | 601,203 | 110 | 43.6 s |
+| 10,903 | 2,582,341 | 237 | 185.0 s |
+
+Edge count grows faster than principal count, and that is a property of the
+account rather than an artefact of the tool. A principal allowed
+`iam:CreateAccessKey` with no resource scope genuinely can create credentials
+for every user in the account, so doubling the account doubles that principal's
+out degree as well as the number of such principals. The graph is large because
+the blast radius is large.
+
+Memory is not the constraint: the 10,903 principal run peaked at 640MB, roughly
+190 bytes per edge, so an account producing ten million edges fits in about two
+gigabytes. Wall clock is. An account at that size takes several minutes to
+build, which is fine for a weekly audit and wrong for an incident.
+
+The mitigation is already in the output rather than in a roadmap item. The one
+hop count is the number worth acting on first, every one of those paths is a
+single statement somebody wrote, and it is available from a partial graph. For
+an account in a state where the full build is slow, that is also the state where
+the one hop list is long enough to keep a team busy.
 
 ## Architecture decision records
 
