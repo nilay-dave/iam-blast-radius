@@ -21,6 +21,7 @@ import networkx as nx
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from ibr import __version__
 from ibr.account.model import Account
 from ibr.account.serialise import read_account
 from ibr.config import Config, load_config
@@ -133,7 +134,7 @@ def create_app(account_path: Path | str | None = None, config: Config | None = N
     app = FastAPI(
         title="iam-blast-radius",
         description="Privilege reachability queries over a loaded AWS account snapshot.",
-        version="0.1.0",
+        version=__version__,
     )
     if account_path is not None:
         state.load(account_path, config)
