@@ -3,26 +3,26 @@
   "analysis": {
     "account_kind": "synthetic",
     "account_seed": 7,
-    "principals": 2177,
-    "edges": 112493,
+    "principals": 2197,
+    "edges": 118566,
     "max_hops": 3,
     "escalation_edge_kinds": 9,
-    "already_admin": 238,
-    "escalating": 302,
-    "escalating_pct": 15.6,
-    "labelled_least_privilege": 947,
-    "mislabelled": 221,
-    "mislabelled_pct": 23.3,
-    "at_one_hop": 209,
-    "at_two_hops": 93,
-    "at_three_hops": 0,
+    "already_admin": 262,
+    "escalating": 405,
+    "escalating_pct": 20.9,
+    "labelled_least_privilege": 931,
+    "mislabelled": 276,
+    "mislabelled_pct": 29.6,
+    "at_one_hop": 229,
+    "at_two_hops": 124,
+    "at_three_hops": 52,
     "conditional_only": 0,
-    "self_scoped_principals": 232
+    "self_scoped_principals": 220
   },
   "quality": {
-    "test_coverage_pct": 98.2,
-    "test_count": 173,
-    "commit_count": 32
+    "test_coverage_pct": 98.0,
+    "test_count": 177,
+    "commit_count": 39
   },
   "performance": {
     "hardware": {
@@ -31,31 +31,31 @@
       "processor": "x86_64",
       "cpu_count": 2
     },
-    "repeats": 3,
+    "repeats": 2,
     "scenarios": [
       {
-        "principals": 218,
+        "principals": 220,
         "account_mb": 0.1,
-        "edges": 1442,
-        "build_median_s": 0.0743,
-        "analyse_median_s": 0.0005,
-        "mislabelled_pct": 22.45
+        "edges": 1253,
+        "build_median_s": 0.0602,
+        "analyse_median_s": 0.0006,
+        "mislabelled_pct": 27.55
       },
       {
-        "principals": 2177,
+        "principals": 2197,
         "account_mb": 1.3,
-        "edges": 112493,
-        "build_median_s": 7.1538,
-        "analyse_median_s": 0.017,
-        "mislabelled_pct": 23.34
+        "edges": 118566,
+        "build_median_s": 6.9694,
+        "analyse_median_s": 0.016,
+        "mislabelled_pct": 29.65
       },
       {
-        "principals": 21817,
-        "account_mb": 12.8,
-        "edges": 9084811,
-        "build_median_s": 712.7423,
-        "analyse_median_s": 0.829,
-        "mislabelled_pct": 22.34
+        "principals": 22017,
+        "account_mb": 13.0,
+        "edges": 8945657,
+        "build_median_s": 721.4133,
+        "analyse_median_s": 1.3397,
+        "mislabelled_pct": 27.77
       }
     ]
   }
