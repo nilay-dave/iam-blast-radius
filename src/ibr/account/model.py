@@ -148,6 +148,12 @@ class Account:
     account_id: str
     principals: dict[str, Principal] = field(default_factory=dict)
     policies: dict[str, Policy] = field(default_factory=dict)
+    # Memoised effective statements. Resolving them walks attached policies and
+    # group membership, and the graph build asks for the same principal's
+    # statements thousands of times, so recomputing was the single largest cost
+    # in the build. Invalidated by rebuilding the Account, which is what every
+    # caller does anyway: the model is loaded from a file and not mutated.
+    _statement_cache: dict[str, list[Statement]] = field(default_factory=dict, repr=False)
 
     def effective_statements(self, principal_id: str, _seen: frozenset[str] | None = None) -> list[Statement]:
         """Every statement that applies to a principal.
@@ -160,6 +166,10 @@ class Account:
         seen = _seen or frozenset()
         if principal_id in seen:
             return []
+        if _seen is None:
+            cached = self._statement_cache.get(principal_id)
+            if cached is not None:
+                return cached
         principal = self.principals.get(principal_id)
         if principal is None:
             return []
@@ -171,7 +181,32 @@ class Account:
                 collected.extend(policy.statements)
         for group_id in principal.group_ids:
             collected.extend(self.effective_statements(group_id, seen | {principal_id}))
+        if _seen is None:
+            self._statement_cache[principal_id] = collected
         return collected
+
+    def allow_patterns(self, principal_id: str, action: str) -> tuple[frozenset[str], bool]:
+        """Resource patterns on which this principal is allowed `action`.
+
+        Returns the patterns and whether every matching Allow carried a
+        condition. Used to index candidate targets rather than testing every
+        principal against every principal: a user allowed
+        iam:CreateAccessKey only on its own ARN has exactly one candidate, and
+        a user allowed nothing has none.
+
+        Deny is handled by the caller through `allows`, because a Deny may be
+        scoped more narrowly than the Allow and only the specific target
+        resolves it.
+        """
+        patterns: set[str] = set()
+        conditional = True
+        for statement in self.effective_statements(principal_id):
+            if statement.effect is not Effect.ALLOW or not statement.matches_action(action):
+                continue
+            patterns.update(statement.resources)
+            if not statement.is_conditional:
+                conditional = False
+        return frozenset(patterns), (conditional and bool(patterns))
 
     def allows(self, principal_id: str, action: str, resource: str = "*") -> bool:
         """True when the principal may perform the action on the resource.
