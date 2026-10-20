@@ -14,13 +14,20 @@ the proportion:
   self_scoped       holds an escalation action but only against its own ARN,
                     which looks alarming in a policy grep and is not a path
   one_hop           a direct escalation, usually PassRole or AttachUserPolicy
-  multi_hop         reaches admin through another principal
+  multi_hop         reaches admin through one other principal, so two hops
+  deep_hop          reaches admin through two other principals, so three hops
   already_admin     holds administrative power outright
 
 The interesting one is `self_scoped`. A tool that string matched policy
 documents would report every one of those as a finding, and an engineer who
 chased a few would stop trusting the tool. They are in the account specifically
 so the resource scoping has something to get right.
+
+`deep_hop` is rare on purpose, and its share is the one here least defensible
+from observation. Escalation in real accounts is short, because the actions that
+grant privilege grant a lot of it at once, so a chain of three is unusual. It
+exists so the traversal is exercised beyond two hops rather than because an
+account should be expected to contain many.
 
 Least privilege tags are applied independently of actual reachability, which is
 what makes the headline number meaningful: the tag records what somebody
@@ -56,10 +63,11 @@ POWERUSER_ARN = "arn:aws:iam::aws:policy/PowerUserAccess"
 # most principals are fine, a meaningful minority hold one dangerous action,
 # and administrators are a small group.
 SHAPE_SHARES = {
-    "contained": 0.62,
+    "contained": 0.60,
     "self_scoped": 0.12,
     "one_hop": 0.14,
-    "multi_hop": 0.08,
+    "multi_hop": 0.07,
+    "deep_hop": 0.03,
     "already_admin": 0.04,
 }
 
@@ -170,9 +178,10 @@ def generate(out_path: Path | str, principals: int, seed: int = 7) -> Generation
                 statements.append(Statement(Effect.ALLOW, grant, resources=(rng.choice(admin_role_ids),)))
             else:
                 statements.append(Statement(Effect.ALLOW, grant))
-        elif shape == "multi_hop":
+        elif shape in {"multi_hop", "deep_hop"}:
             # Reaches an intermediary rather than admin directly. The
-            # intermediary is wired up after every principal exists.
+            # intermediary is wired up after every principal exists, because it
+            # has to be chosen from principals that themselves reach admin.
             statements.append(Statement(Effect.ALLOW, ("iam:CreateAccessKey",), resources=("PENDING",)))
         elif shape == "already_admin":
             statements.append(Statement(Effect.ALLOW, ("*",)))
@@ -189,30 +198,42 @@ def generate(out_path: Path | str, principals: int, seed: int = 7) -> Generation
             shapes["already_admin"] += 1
         user_ids.append(user_id)
 
-    # Wire the multi hop principals to an intermediary that itself reaches admin.
-    one_hop_users = [
-        user_id for user_id, shape in zip(user_ids, assigned, strict=True) if shape == "one_hop"
-    ]
-    if one_hop_users:
-        for user_id, shape in zip(user_ids, assigned, strict=True):
-            if shape != "multi_hop":
-                continue
-            intermediary = rng.choice(one_hop_users)
-            principal = account.principals[user_id]
-            rewritten = tuple(
+    # Wire the chained principals to an intermediary that itself reaches admin.
+    # multi_hop points at a one_hop principal, giving two hops. deep_hop points
+    # at a multi_hop principal, giving three. Resolving in that order matters:
+    # a deep_hop pointed at another deep_hop would produce a chain of unknown
+    # length, or a cycle.
+    def _retarget(user_id: str, intermediary: str) -> None:
+        principal = account.principals[user_id]
+        account.principals[user_id] = Principal(
+            principal_id=principal.principal_id,
+            principal_type=principal.principal_type,
+            inline_statements=tuple(
                 Statement(s.effect, s.actions, (intermediary,), s.conditions)
                 if s.resources == ("PENDING",) else s
                 for s in principal.inline_statements
-            )
-            account.principals[user_id] = Principal(
-                principal_id=principal.principal_id,
-                principal_type=principal.principal_type,
-                inline_statements=rewritten,
-                attached_policy_arns=principal.attached_policy_arns,
-                group_ids=principal.group_ids,
-                trust_policy=principal.trust_policy,
-                tags=principal.tags,
-            )
+            ),
+            attached_policy_arns=principal.attached_policy_arns,
+            group_ids=principal.group_ids,
+            trust_policy=principal.trust_policy,
+            tags=principal.tags,
+        )
+
+    by_shape: dict[str, list[str]] = {}
+    for user_id, shape in zip(user_ids, assigned, strict=True):
+        by_shape.setdefault(shape, []).append(user_id)
+
+    if by_shape.get("one_hop"):
+        for user_id in by_shape.get("multi_hop", []):
+            _retarget(user_id, rng.choice(by_shape["one_hop"]))
+        if by_shape.get("multi_hop"):
+            for user_id in by_shape.get("deep_hop", []):
+                _retarget(user_id, rng.choice(by_shape["multi_hop"]))
+        else:
+            # Nothing to chain through, so these become ordinary two hop
+            # principals rather than silently pointing at nothing.
+            for user_id in by_shape.get("deep_hop", []):
+                _retarget(user_id, rng.choice(by_shape["one_hop"]))
 
     # A handful of roles trusting real principals, so assume_role edges exist.
     for index in range(max(1, principals // 20)):

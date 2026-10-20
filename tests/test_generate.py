@@ -51,13 +51,33 @@ def test_account_contains_self_scoped_principals_that_are_not_paths(tmp_path, co
     assert any(graph.out_degree(principal_id) == 0 for principal_id in self_scoped)
 
 
-def test_generated_account_has_principals_at_more_than_one_hop(tmp_path, config):
-    """A generator that only produced one hop paths would never exercise the
-    multi hop traversal."""
+def test_generated_account_exercises_every_hop_depth(tmp_path, config):
+    """A generator that only produced short paths would never exercise the
+    traversal beyond its first step, and the default max_hops of 3 would be
+    indistinguishable from 2."""
     result = generate(tmp_path / "a.json", 500, seed=7)
     report = analyse(build_graph(result.account, config), result.account.account_id, config)
-    assert len(report.at_hop(1)) > 0
-    assert len(report.at_hop(2)) > 0
+    for hop in (1, 2, 3):
+        assert len(report.at_hop(hop)) > 0, f"no principal at {hop} hop(s)"
+
+
+def test_deep_paths_are_the_rarest_shape(tmp_path, config):
+    """Escalation in real accounts is short, because the actions that grant
+    privilege grant a lot of it at once. The generator should reflect that
+    rather than making three hop chains look common."""
+    result = generate(tmp_path / "a.json", 2000, seed=7)
+    report = analyse(build_graph(result.account, config), result.account.account_id, config)
+    assert len(report.at_hop(3)) < len(report.at_hop(2)) < len(report.at_hop(1))
+
+
+def test_a_small_account_still_reaches_three_hops(tmp_path, config):
+    """Every shape is guaranteed present even in a small account, and the
+    chaining has to survive that: a deep_hop with no multi_hop to point at must
+    become a two hop principal rather than pointing at nothing."""
+    result = generate(tmp_path / "a.json", 12, seed=3)
+    report = analyse(build_graph(result.account, config), result.account.account_id, config)
+    assert len(report.escalating) > 0
+    assert all(f.shortest_path is not None for f in report.escalating)
 
 
 def test_least_privilege_labels_are_independent_of_reachability(tmp_path, config):
