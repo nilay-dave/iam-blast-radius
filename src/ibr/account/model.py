@@ -91,21 +91,36 @@ class Policy:
     def statements(self) -> tuple[Statement, ...]:
         return self.default_version.statements
 
-    @property
-    def has_more_permissive_version(self) -> bool:
-        """True when a non default version allows actions the default does not.
+    def version_allows(self, version: PolicyVersion, action: str) -> bool:
+        """Whether a specific version allows an action, Deny included."""
+        allowed = False
+        for statement in version.statements:
+            if not statement.matches_action(action):
+                continue
+            if statement.effect is Effect.DENY:
+                return False
+            allowed = True
+        return allowed
 
-        SetDefaultPolicyVersion is only an escalation when there is something
-        worth rolling back to. Asserting that rather than assuming it is the
-        difference between a finding and a guess.
+    def grants_in_a_non_default_version(self, actions: frozenset[str]) -> bool:
+        """True when a non default version allows an action the default does not.
+
+        The question is specifically about the actions passed in, not about any
+        difference between versions. An earlier version of this method returned
+        true whenever a non default version mentioned any action the default did
+        not, which made a rollback from s3:Get to s3:List read as an escalation.
+        Rolling back to a version that grants a different harmless permission is
+        not a privilege escalation, and reporting it as one is noise in exactly
+        the place a reader has least patience for it.
         """
-        default_actions = {a.lower() for s in self.default_version.statements if s.effect is Effect.ALLOW for a in s.actions}
         for version in self.versions:
             if version.is_default:
                 continue
-            other = {a.lower() for s in version.statements if s.effect is Effect.ALLOW for a in s.actions}
-            if other - default_actions:
-                return True
+            for action in actions:
+                if self.version_allows(version, action) and not self.version_allows(
+                    self.default_version, action
+                ):
+                    return True
         return False
 
 

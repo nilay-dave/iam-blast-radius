@@ -32,6 +32,7 @@ from ibr.config import Config
 from ibr.graph.edges import (
     ADMIN_EQUIVALENT_ACTIONS,
     DEFINITIONS,
+    SELF_ESCALATION_ACTIONS,
     EdgeDefinition,
     EdgeKind,
 )
@@ -84,7 +85,6 @@ def _edge_applies(
 
     Returns (applies, conditional).
     """
-    source = account.principals[source_id]
     target = account.principals[target_id]
 
     # Self edges are not escalation.
@@ -141,17 +141,6 @@ def _edge_applies(
         if trust.conditions:
             conditional = True
 
-    # SetDefaultPolicyVersion only escalates when there is a more permissive
-    # version to roll back to.
-    if definition.kind is EdgeKind.SET_DEFAULT_POLICY_VERSION:
-        reachable = any(
-            account.policies[arn].has_more_permissive_version
-            for arn in target.attached_policy_arns
-            if arn in account.policies
-        )
-        if not reachable:
-            return False, False
-
     if conditional and not config.assume_conditions_satisfiable:
         return False, False
     return True, conditional
@@ -163,8 +152,27 @@ def is_admin_equivalent(account: Account, principal_id: str) -> bool:
     Checked by evaluating each administrative action through the full policy
     evaluation rather than by string matching on policy documents, so an
     explicit Deny correctly removes a principal from this set.
+
+    Self escalation counts. A principal that can roll one of its own attached
+    policies back to a version granting an administrative action is an
+    administrator in one step that touches nobody else, which is why this is
+    not modelled as a graph edge: an edge means "A obtains B's privileges" and
+    there is no B here.
     """
-    return any(account.allows(principal_id, action) for action in sorted(ADMIN_EQUIVALENT_ACTIONS))
+    if any(account.allows(principal_id, action) for action in sorted(ADMIN_EQUIVALENT_ACTIONS)):
+        return True
+
+    principal = account.principals.get(principal_id)
+    if principal is None:
+        return False
+    for action in sorted(SELF_ESCALATION_ACTIONS):
+        if not account.allows(principal_id, action):
+            continue
+        for arn in principal.attached_policy_arns:
+            policy = account.policies.get(arn)
+            if policy is not None and policy.grants_in_a_non_default_version(ADMIN_EQUIVALENT_ACTIONS):
+                return True
+    return False
 
 
 def _candidate_targets(
