@@ -1,9 +1,9 @@
 import json
 
 import pytest
+from tests.conftest import ADMIN_ARN, allow, deny, group, new_account, role, user
 
 from ibr.account.serialise import AccountFormatError, from_dict, read_account, to_dict, write_account
-from tests.conftest import ADMIN_ARN, allow, deny, group, new_account, role, user
 
 
 def _populated():

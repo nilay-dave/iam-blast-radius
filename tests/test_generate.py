@@ -2,7 +2,6 @@ import pytest
 
 from ibr.account.generate import SHAPE_SHARES, generate
 from ibr.account.serialise import read_account
-from ibr.config import Config
 from ibr.graph.build import build_graph
 from ibr.graph.reach import analyse
 

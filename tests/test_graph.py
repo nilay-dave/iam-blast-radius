@@ -234,3 +234,78 @@ def test_empty_account_builds_an_empty_graph(config):
     graph = _graph(new_account(), config)
     assert graph.number_of_nodes() == 0
     assert graph.number_of_edges() == 0
+
+
+def test_candidate_targets_is_empty_without_the_action(config):
+    from ibr.graph.build import _candidate_targets
+    from ibr.graph.edges import BY_KIND, EdgeKind
+
+    account = new_account()
+    user(account, "u:a", allow("s3:GetObject"))
+    candidates = _candidate_targets(
+        account, BY_KIND[EdgeKind.CREATE_ACCESS_KEY], "u:a", tuple(account.principals)
+    )
+    assert candidates == []
+
+
+def test_candidate_targets_intersects_across_required_actions(config):
+    """What makes the PassRole family cheap: plenty of principals hold
+    lambda:CreateFunction and very few also hold iam:PassRole."""
+    from ibr.graph.build import _candidate_targets
+    from ibr.graph.edges import BY_KIND, EdgeKind
+
+    account = new_account()
+    role(account, "r:a", policies=(ADMIN_ARN,), services=("lambda.amazonaws.com",))
+    role(account, "r:b", policies=(ADMIN_ARN,), services=("lambda.amazonaws.com",))
+    user(account, "u:a",
+         allow("iam:PassRole", resources=("r:a",)),
+         allow("lambda:CreateFunction", "lambda:InvokeFunction"))
+    candidates = _candidate_targets(
+        account, BY_KIND[EdgeKind.PASS_ROLE_TO_LAMBDA], "u:a", tuple(account.principals)
+    )
+    assert candidates == ["r:a"]
+
+
+def test_candidate_targets_resolves_a_glob_pattern(config):
+    from ibr.graph.build import _candidate_targets
+    from ibr.graph.edges import BY_KIND, EdgeKind
+
+    account = new_account()
+    user(account, "u:dev-1", allow("s3:GetObject"))
+    user(account, "u:dev-2", allow("s3:GetObject"))
+    user(account, "u:prod-1", allow("s3:GetObject"))
+    user(account, "u:a", allow("iam:CreateAccessKey", resources=("u:dev-*",)))
+    candidates = _candidate_targets(
+        account, BY_KIND[EdgeKind.CREATE_ACCESS_KEY], "u:a", tuple(account.principals)
+    )
+    assert candidates == ["u:dev-1", "u:dev-2"]
+
+
+def test_candidate_targets_for_an_unresolvable_pattern_is_empty(config):
+    from ibr.graph.build import _candidate_targets
+    from ibr.graph.edges import BY_KIND, EdgeKind
+
+    account = new_account()
+    user(account, "u:a", allow("iam:CreateAccessKey", resources=("u:nobody",)))
+    candidates = _candidate_targets(
+        account, BY_KIND[EdgeKind.CREATE_ACCESS_KEY], "u:a", tuple(account.principals)
+    )
+    assert candidates == []
+
+
+def test_assume_role_with_a_conditional_trust_policy_is_flagged(config):
+    account = new_account()
+    role(account, "r:admin", policies=(ADMIN_ARN,), trusts=("u:a",), conditions=("sts:ExternalId",))
+    user(account, "u:a", allow("sts:AssumeRole"))
+    graph = build_graph(account, config)
+    assert graph.edges["u:a", "r:admin"]["conditional"] is True
+
+
+def test_update_assume_role_policy_defeats_a_point_in_time_trust_read(config):
+    """A trust relationship the attacker can rewrite is not a boundary."""
+    account = new_account()
+    role(account, "r:admin", policies=(ADMIN_ARN,), trusts=())
+    user(account, "u:a", allow("iam:UpdateAssumeRolePolicy", "sts:AssumeRole"))
+    graph = build_graph(account, config)
+    assert graph.has_edge("u:a", "r:admin")
+    assert graph.edges["u:a", "r:admin"]["kind"] == "update_assume_role_policy"
