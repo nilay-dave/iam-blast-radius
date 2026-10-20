@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IAM blast radius</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #141617; --muted: #4a5154; --line: #d8dcde;
+    --panel: #f5f6f7; --bad: #96201a; --warn: #6f4800; --ok: #17593a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121415; --fg: #e8eaeb; --muted: #9aa2a5; --line: #2a2e30;
+      --panel: #1a1d1e; --bad: #ef6a5f; --warn: #d79b2b; --ok: #4fb183;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--muted); margin: 40px 0 12px; font-weight: 600; }
+  .sub { color: var(--muted); margin: 0 0 28px; font-size: 13px; }
+  .headline { border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px;
+    background: var(--panel); margin-bottom: 20px; }
+  .big { font-size: 42px; font-weight: 650; line-height: 1; color: var(--bad);
+    font-variant-numeric: tabular-nums; }
+  .big small { font-size: 19px; font-weight: 500; }
+  .headline p { margin: 10px 0 0; max-width: 68ch; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 10px; }
+  .tile { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .tile .n { font-size: 23px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tile .l { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  caption { text-align: left; font-size: 12.5px; color: var(--muted); padding-bottom: 10px; }
+  th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); border-bottom: 1px solid var(--line); padding: 8px 10px 8px 0; font-weight: 600; }
+  td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--line); vertical-align: top;
+    font-variant-numeric: tabular-nums; }
+  code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+  .path { color: var(--muted); font-size: 12px; margin-top: 3px; word-break: break-word; }
+  .v { font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+  .v::before { margin-right: 6px; }
+  .v-admin { color: var(--bad); }
+  .v-admin::before { content: "A"; }
+  .v-reaches { color: var(--warn); }
+  .v-reaches::before { content: "!"; }
+  .v-contained { color: var(--ok); }
+  .v-contained::before { content: "ok"; font-size: 10px; }
+  .tag { border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px;
+    font-size: 11.5px; color: var(--muted); margin-right: 4px; white-space: nowrap; }
+  .tag-claim { color: var(--bad); border-color: var(--bad); }
+  .skip { position: absolute; left: -9999px; }
+  .skip:focus { left: 8px; top: 8px; background: var(--bg); padding: 10px 14px;
+    border: 1px solid var(--line); border-radius: 6px; z-index: 10; }
+  footer { margin-top: 44px; padding-top: 16px; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<a class="skip" href="#findings">Skip to the findings table</a>
+<div class="wrap">
+  <h1>IAM blast radius</h1>
+  <p class="sub">
+    Account {{ account.account_id }}. {{ "{:,}".format(account.principals) }} principals,
+    reachability computed to {{ account.max_hops }} hops.
+  </p>
+
+  <div class="headline">
+    <div class="big" role="img"
+         aria-label="{{ "%.1f"|format(account.mislabelled_pct) }} percent of principals labelled least privilege reach administrative access">
+      {{ "%.1f"|format(account.mislabelled_pct) }}<small>%</small>
+    </div>
+    <p>
+      of the {{ account.labelled_least_privilege }} principals somebody labelled least privilege can
+      reach an administrative action within {{ account.max_hops }} hops. A label records what was
+      intended. This records what is true.
+    </p>
+  </div>
+
+  <div class="grid" role="list" aria-label="Headline figures">
+    <div class="tile" role="listitem">
+      <div class="n">{{ account.already_admin }}</div>
+      <div class="l">already administrative</div>
+    </div>
+    <div class="tile" role="listitem">
+      <div class="n">{{ account.escalating }}</div>
+      <div class="l">reach admin by escalation</div>
+    </div>
+    <div class="tile" role="listitem">
+      <div class="n">{{ "%.1f"|format(account.escalating_pct) }}%</div>
+      <div class="l">of non admin principals</div>
+    </div>
+    <div class="tile" role="listitem">
+      <div class="n">{{ account.conditional_only }}</div>
+      <div class="l">reach admin only through a condition</div>
+    </div>
+  </div>
+
+  <h2>By hop count</h2>
+  <table>
+    <caption>
+      One hop is a single escalation step. The one hop set is what gets contained first, because
+      each one is a single statement to remove.
+    </caption>
+    <thead><tr><th>Hops to admin</th><th>Principals</th></tr></thead>
+    <tbody>
+      {% for hop, count in account.by_hop.items() %}
+      <tr><td>{{ hop }}</td><td>{{ "{:,}".format(count) }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2 id="findings">Principals</h2>
+  <table>
+    <caption>
+      Sorted by hops to admin, nearest first.
+      {% if truncated %}Showing {{ shown | length }} of {{ "{:,}".format(account.principals) }}; the
+      full set is in the JSON output.{% endif %}
+    </caption>
+    <thead>
+      <tr><th>Principal</th><th>Type</th><th>Status</th><th>Hops</th><th>First steps</th><th>Labels</th></tr>
+    </thead>
+    <tbody>
+      {% for finding in shown %}
+      <tr>
+        <td>
+          <code>{{ finding.principal_id }}</code>
+          {% if finding.shortest_path %}
+          <div class="path">{{ finding.shortest_path.principals | join(" to ") }}</div>
+          <div class="path">
+            {% for step in finding.shortest_path.steps %}{{ step.kind | replace("_", " ") }}{{ ", " if not loop.last }}{% endfor %}
+            {% if finding.conditional_only %} (every step rests on an unevaluated condition){% endif %}
+          </div>
+          {% endif %}
+        </td>
+        <td>{{ finding.principal_type }}</td>
+        {% if finding.already_admin %}
+        <td class="v v-admin">admin</td>
+        {% elif finding.reaches_admin %}
+        <td class="v v-reaches">reaches</td>
+        {% else %}
+        <td class="v v-contained">contained</td>
+        {% endif %}
+        <td>{{ finding.hops_to_admin if finding.hops_to_admin is not none else "" }}</td>
+        <td>{{ finding.first_steps_toward_admin }}</td>
+        <td>
+          {% for tag in finding.tags %}
+          <span class="tag {{ 'tag-claim' if finding.claims_least_privilege and 'least' in tag|lower }}">{{ tag }}</span>
+          {% endfor %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <footer>
+    Condition keys are recorded and not evaluated, so an edge that depends on one is included and
+    flagged rather than dropped: this tool over reports reachability rather than under reporting it.
+    Permission boundaries, service control policies and resource policies other than role trust are
+    out of scope.
+    {% if not account.assume_conditions_satisfiable %}
+    Conditional edges were excluded from this run.
+    {% endif %}
+    When the account is the bundled synthetic one, every number here is a simulation.
+  </footer>
+</div>
+</body>
+</html>
