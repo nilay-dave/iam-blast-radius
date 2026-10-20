@@ -15,6 +15,13 @@ least-privilege label.
 Paths are reported, not just counts. A number tells somebody there is a problem;
 a path tells them which policy statement to delete, and only the second one gets
 fixed.
+
+Both answers come from one traversal, not from a search per principal. Running
+all_simple_paths from every principal to every administrative node measured 35
+seconds on a 2,177 principal account and is the wrong shape for the question:
+a single breadth first search backwards from every administrative node, over the
+reversed graph, labels every principal with its hop distance and its next step
+in one pass. See ADR-002.
 """
 
 from __future__ import annotations
@@ -72,7 +79,10 @@ class PrincipalFinding:
     reaches_admin: bool
     hops_to_admin: int | None
     shortest_path: EscalationPath | None
+    # Distinct next steps that lead toward admin: how many separate statements
+    # have to be removed to contain this principal.
     paths_found: int
+    # Principals reachable within max_hops. -1 when not computed; see analyse.
     reachable_within_max_hops: int
     conditional_only: bool = False
 
@@ -152,6 +162,82 @@ def _to_path(graph: nx.DiGraph, nodes: list[str]) -> EscalationPath:
     return EscalationPath(steps=steps)
 
 
+@dataclass(frozen=True)
+class AdminDistances:
+    """Hop distance to the nearest administrative principal, for every node.
+
+    `next_hop` is the first step of a shortest path, so a full path is
+    reconstructed by following it without searching again.
+    """
+
+    distance: dict[str, int]
+    next_hop: dict[str, str]
+    admin_nodes: frozenset[str]
+
+
+def admin_distances(graph: nx.DiGraph, max_hops: int) -> AdminDistances:
+    """Label every principal with its distance to the nearest admin node.
+
+    One breadth first search over the reversed graph, seeded with every
+    administrative node at distance zero. Linear in the graph rather than
+    quadratic in principals, which is the difference between 35 seconds and
+    well under one on an account of a few thousand.
+    """
+    admin_nodes = frozenset(n for n, d in graph.nodes(data=True) if d.get("admin"))
+    distance: dict[str, int] = dict.fromkeys(admin_nodes, 0)
+    next_hop: dict[str, str] = {}
+
+    frontier = list(admin_nodes)
+    hops = 0
+    while frontier and hops < max_hops:
+        hops += 1
+        nxt: list[str] = []
+        for node in frontier:
+            # Reversed traversal: who can reach `node` in one step.
+            for predecessor in graph.predecessors(node):
+                if predecessor in distance:
+                    continue
+                distance[predecessor] = hops
+                next_hop[predecessor] = node
+                nxt.append(predecessor)
+        frontier = nxt
+
+    return AdminDistances(distance=distance, next_hop=next_hop, admin_nodes=admin_nodes)
+
+
+def path_from(graph: nx.DiGraph, principal_id: str, distances: AdminDistances) -> EscalationPath | None:
+    """Reconstruct a shortest escalation path by following next_hop."""
+    if principal_id in distances.admin_nodes:
+        return None
+    if principal_id not in distances.next_hop:
+        return None
+    nodes = [principal_id]
+    current = principal_id
+    while current in distances.next_hop:
+        current = distances.next_hop[current]
+        nodes.append(current)
+    return _to_path(graph, nodes)
+
+
+def distinct_first_steps(graph: nx.DiGraph, principal_id: str, distances: AdminDistances) -> int:
+    """How many independent next steps lead toward admin.
+
+    Replaces a count of enumerated simple paths, which was exponential to
+    compute and told a reader nothing they acted on. The number of distinct
+    first steps is what matters for remediation: it is how many separate
+    statements have to be removed to contain this principal, and it is the
+    out degree restricted to neighbours that are themselves closer to admin.
+    """
+    own = distances.distance.get(principal_id)
+    if own is None:
+        return 0
+    return sum(
+        1
+        for neighbour in graph.successors(principal_id)
+        if distances.distance.get(neighbour, 10**9) < own
+    )
+
+
 def reachable_within(graph: nx.DiGraph, principal_id: str, max_hops: int) -> dict[str, int]:
     """Every principal reachable from `principal_id`, with its hop distance.
 
@@ -196,33 +282,48 @@ def paths_to_admin(
     return found
 
 
-def analyse(graph: nx.DiGraph, account_id: str, config: Config) -> ReachabilityReport:
-    """Compute the reachability report for every principal in the graph."""
+def analyse(
+    graph: nx.DiGraph,
+    account_id: str,
+    config: Config,
+    with_blast_radius: bool = False,
+) -> ReachabilityReport:
+    """Compute the reachability report for every principal in the graph.
+
+    `with_blast_radius` adds a per principal count of everything reachable
+    within max_hops. It is off by default because it is a breadth first search
+    per principal, which is quadratic over the account, while every other
+    number here comes from a single traversal. The CLI turns it on for the
+    principals it actually displays.
+    """
     report = ReachabilityReport(
         account_id=account_id,
         max_hops=config.max_hops,
         assume_conditions_satisfiable=config.assume_conditions_satisfiable,
     )
+    distances = admin_distances(graph, config.max_hops)
 
     for principal_id, data in graph.nodes(data=True):
-        already_admin = bool(data.get("admin"))
-        reachable = reachable_within(graph, principal_id, config.max_hops)
-        paths = paths_to_admin(graph, principal_id, config)
-        real_paths = [p for p in paths if p.steps]
+        already_admin = principal_id in distances.admin_nodes
+        hops = distances.distance.get(principal_id)
+        shortest = None if already_admin else path_from(graph, principal_id, distances)
 
-        shortest = min(real_paths, key=lambda p: p.hops) if real_paths else None
         report.findings.append(
             PrincipalFinding(
                 principal_id=principal_id,
                 principal_type=str(data.get("principal_type", "unknown")),
                 tags=tuple(data.get("tags", ())),
                 already_admin=already_admin,
-                reaches_admin=bool(real_paths),
-                hops_to_admin=shortest.hops if shortest else None,
+                reaches_admin=shortest is not None,
+                hops_to_admin=None if already_admin else hops,
                 shortest_path=shortest,
-                paths_found=len(real_paths),
-                reachable_within_max_hops=len(reachable),
-                conditional_only=bool(real_paths) and all(p.conditional for p in real_paths),
+                paths_found=distinct_first_steps(graph, principal_id, distances),
+                reachable_within_max_hops=(
+                    len(reachable_within(graph, principal_id, config.max_hops))
+                    if with_blast_radius
+                    else -1
+                ),
+                conditional_only=bool(shortest) and shortest.conditional,
             )
         )
 
