@@ -140,6 +140,22 @@ def generate(out_path: Path | str, principals: int, seed: int = 7) -> Generation
     for index, name in enumerate(shape_names):
         assigned[index] = name
 
+    # Privileged groups first. iam:AddUserToGroup is one of the one hop grants
+    # and it is only a path if there is a group worth joining: without one, a
+    # principal holding it is a dead end, and any chain resolved through that
+    # principal is dead too. That was a real bug here, found by a test asserting
+    # a small account still produces a three hop path.
+    privileged_group_ids: list[str] = []
+    for index in range(max(1, principals // 100)):
+        group_id = f"group/privileged-{index:03d}"
+        privileged_group_ids.append(group_id)
+        account.principals[group_id] = Principal(
+            principal_id=group_id,
+            principal_type=PrincipalType.GROUP,
+            attached_policy_arns=(ADMIN_ARN,),
+            tags=("purpose:elevated",),
+        )
+
     # Admin roles first: every escalation path needs somewhere to land.
     admin_role_ids: list[str] = []
     admin_count = max(2, sum(1 for s in assigned if s == "already_admin"))
@@ -176,6 +192,10 @@ def generate(out_path: Path | str, principals: int, seed: int = 7) -> Generation
             grant = rng.choice(ONE_HOP_GRANTS)
             if "iam:PassRole" in grant:
                 statements.append(Statement(Effect.ALLOW, grant, resources=(rng.choice(admin_role_ids),)))
+            elif "iam:AddUserToGroup" in grant:
+                statements.append(
+                    Statement(Effect.ALLOW, grant, resources=(rng.choice(privileged_group_ids),))
+                )
             else:
                 statements.append(Statement(Effect.ALLOW, grant))
         elif shape in {"multi_hop", "deep_hop"}:

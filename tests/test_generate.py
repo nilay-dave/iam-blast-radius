@@ -103,3 +103,35 @@ def test_admin_roles_trust_the_services_that_make_pass_role_work(tmp_path):
 def test_written_account_reads_back(tmp_path):
     result = generate(tmp_path / "a.json", 100, seed=2)
     assert read_account(result.path).account_id == result.account.account_id
+
+
+def test_every_one_hop_grant_is_actually_a_path(tmp_path, config):
+    """Regression: iam:AddUserToGroup was handed out as a one hop grant while
+    the generator created no groups, so one in six one hop principals was a
+    dead end, and any chain resolved through one of them was dead too."""
+    result = generate(tmp_path / "a.json", 600, seed=7)
+    graph = build_graph(result.account, config)
+    report = analyse(graph, result.account.account_id, config)
+    reaching = {f.principal_id for f in report.escalating} | {f.principal_id for f in report.admin_principals}
+
+    dead_ends = [
+        principal_id
+        for principal_id, principal in result.account.principals.items()
+        if principal_id.startswith("user/")
+        and any(
+            action.startswith("iam:") and action != "iam:PassRole"
+            for statement in principal.inline_statements
+            for action in statement.actions
+        )
+        and principal_id not in reaching
+        and graph.out_degree(principal_id) == 0
+        and not any(s.resources == (principal_id,) for s in principal.inline_statements)
+    ]
+    assert dead_ends == [], f"principals holding an escalation action that reaches nothing: {dead_ends}"
+
+
+def test_privileged_groups_exist_for_add_user_to_group(tmp_path):
+    result = generate(tmp_path / "a.json", 300, seed=7)
+    groups = [p for p in result.account.principals.values() if p.principal_id.startswith("group/")]
+    assert groups
+    assert all("arn:aws:iam::aws:policy/AdministratorAccess" in p.attached_policy_arns for p in groups)
