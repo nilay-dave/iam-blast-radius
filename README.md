@@ -1,6 +1,6 @@
 # iam-blast-radius
 
-**Computes IAM privilege reachability from policies and trust. On the bundled account, <!--number:analysis.mislabelled_pct-->0<!--/number--> percent of principals labelled least privilege reach administrative access anyway.**
+**Computes IAM privilege reachability from policies and trust. On the bundled account, <!--number:analysis.mislabelled_pct-->23.3<!--/number--> percent of principals labelled least privilege reach administrative access anyway.**
 
 [![ci](https://github.com/__GITHUB_USERNAME__/iam-blast-radius/actions/workflows/ci.yml/badge.svg)](https://github.com/__GITHUB_USERNAME__/iam-blast-radius/actions/workflows/ci.yml)
 [![coverage](https://img.shields.io/endpoint?url=https://__GITHUB_USERNAME__.github.io/iam-blast-radius/badges/coverage.json)](https://github.com/__GITHUB_USERNAME__/iam-blast-radius/actions/workflows/coverage-badge.yml)
@@ -11,8 +11,8 @@
 
 ## What this solves
 
-- **A severity label is not a blast radius.** This computes reachability: if a principal is compromised, what is obtainable, through which escalation primitive, in how many hops. On the bundled account <!--number:analysis.escalating-->0<!--/number--> of the non administrative principals reach admin, which is <!--number:analysis.escalating_pct-->0<!--/number--> percent.
-- **Least privilege is an intention; reachability is a fact.** The tool reports against the label rather than trusting it. Here, <!--number:analysis.mislabelled-->0<!--/number--> of <!--number:analysis.labelled_least_privilege-->0<!--/number--> principals tagged least privilege reach admin anyway.
+- **A severity label is not a blast radius.** This computes reachability: if a principal is compromised, what is obtainable, through which escalation primitive, in how many hops. On the bundled account <!--number:analysis.escalating-->302<!--/number--> of the non administrative principals reach admin, which is <!--number:analysis.escalating_pct-->15.6<!--/number--> percent.
+- **Least privilege is an intention; reachability is a fact.** The tool reports against the label rather than trusting it. Here, <!--number:analysis.mislabelled-->221<!--/number--> of <!--number:analysis.labelled_least_privilege-->947<!--/number--> principals tagged least privilege reach admin anyway.
 - **Paths, not scores.** Every finding carries the principals it passes through and the technique at each step, because a number tells somebody there is a problem and only a path tells them which statement to delete.
 
 ## The problem
@@ -28,15 +28,15 @@ through three principals and no single policy document contains it.
 
 This builds the graph. Nodes are principals; an edge from A to B means a
 compromise of A yields B's privileges through one of
-<!--number:analysis.escalation_edge_kinds-->0<!--/number--> documented escalation
+<!--number:analysis.escalation_edge_kinds-->9<!--/number--> documented escalation
 primitives. Then it answers both questions that matter: across the account, who
 reaches admin and at what distance; and for one principal, what does a
 compromise touch.
 
-On a synthetic account of <!--number:analysis.principals-->0<!--/number-->
-principals and <!--number:analysis.edges-->0<!--/number--> edges,
-<!--number:analysis.at_one_hop-->0<!--/number--> principals reach administrative
-access in a single step and <!--number:analysis.at_two_hops-->0<!--/number--> in
+On a synthetic account of <!--number:analysis.principals-->2,177<!--/number-->
+principals and <!--number:analysis.edges-->112,493<!--/number--> edges,
+<!--number:analysis.at_one_hop-->209<!--/number--> principals reach administrative
+access in a single step and <!--number:analysis.at_two_hops-->93<!--/number--> in
 two. That account is generated, so those figures are a simulation, and the
 generator ships in the repository.
 
@@ -60,7 +60,7 @@ those edges and every one of them was false.
 
 **Resource scope is evaluated.** A principal allowed `iam:CreateAccessKey` only
 on its own ARN reaches nobody. The bundled account contains
-<!--number:analysis.self_scoped_principals-->0<!--/number--> of these
+<!--number:analysis.self_scoped_principals-->232<!--/number--> of these
 deliberately, because the resource scoping needs something to get right and a
 policy grep gets every one of them wrong.
 
@@ -70,7 +70,7 @@ policy grep gets every one of them wrong.
 flowchart LR
   A["account snapshot<br/>(JSON)"] --> B["policy evaluation<br/>Allow, Deny, wildcards, groups"]
   B --> C["candidate index<br/>resource patterns per action"]
-  C --> D["edge construction<br/>10 escalation primitives"]
+  C --> D["edge construction<br/>9 escalation primitives"]
   B --> E["admin equivalence<br/>concrete actions + self escalation"]
   D --> F["reachability graph"]
   E --> F
@@ -99,7 +99,7 @@ report it produces.
 | Typer | CLI with four verbs | Typed arguments and subcommands with a small dependency surface |
 | Jinja2 | HTML report | The report is what gets attached to a remediation ticket |
 | Docker, multi stage | Distribution | The image is the unit people deploy. Runs as uid 10001 with no shell |
-| pytest, pytest-cov | <!--number:quality.test_count-->0<!--/number--> tests, <!--number:quality.test_coverage_pct-->0<!--/number--> percent branch coverage | Runs with no AWS account, no credentials and no network |
+| pytest, pytest-cov | <!--number:quality.test_count-->173<!--/number--> tests, <!--number:quality.test_coverage_pct-->98.2<!--/number--> percent branch coverage | Runs with no AWS account, no credentials and no network |
 
 ## Quickstart
 
@@ -158,14 +158,14 @@ shape the design produces on purpose: a single reverse breadth first search
 labels every principal with its distance to admin, so the query cost does not
 scale with the number of principals asking. Measured with
 `benchmark/run_benchmark.py`, median of
-<!--number:performance.repeats-->0<!--/number--> runs, on 2 vCPU with 8GB RAM,
+<!--number:performance.repeats-->3<!--/number--> runs, on 2 vCPU with 8GB RAM,
 Python 3.13 on Linux. Raw output is in `benchmark/results/benchmark.json`.
 
 | Principals | Edges | Graph build | Reachability | Mislabelled |
 | --- | --- | --- | --- | --- |
-| <!--number:performance.scenarios[0].principals-->0<!--/number--> | <!--number:performance.scenarios[0].edges-->0<!--/number--> | <!--number:performance.scenarios[0].build_median_s-->0<!--/number--> s | <!--number:performance.scenarios[0].analyse_median_s-->0<!--/number--> s | <!--number:performance.scenarios[0].mislabelled_pct-->0<!--/number--> % |
-| <!--number:performance.scenarios[1].principals-->0<!--/number--> | <!--number:performance.scenarios[1].edges-->0<!--/number--> | <!--number:performance.scenarios[1].build_median_s-->0<!--/number--> s | <!--number:performance.scenarios[1].analyse_median_s-->0<!--/number--> s | <!--number:performance.scenarios[1].mislabelled_pct-->0<!--/number--> % |
-| <!--number:performance.scenarios[2].principals-->0<!--/number--> | <!--number:performance.scenarios[2].edges-->0<!--/number--> | <!--number:performance.scenarios[2].build_median_s-->0<!--/number--> s | <!--number:performance.scenarios[2].analyse_median_s-->0<!--/number--> s | <!--number:performance.scenarios[2].mislabelled_pct-->0<!--/number--> % |
+| <!--number:performance.scenarios[0].principals-->218<!--/number--> | <!--number:performance.scenarios[0].edges-->1,442<!--/number--> | <!--number:performance.scenarios[0].build_median_s-->0.074<!--/number--> s | <!--number:performance.scenarios[0].analyse_median_s-->0.001<!--/number--> s | <!--number:performance.scenarios[0].mislabelled_pct-->22.45<!--/number--> % |
+| <!--number:performance.scenarios[1].principals-->2,177<!--/number--> | <!--number:performance.scenarios[1].edges-->112,493<!--/number--> | <!--number:performance.scenarios[1].build_median_s-->7.15<!--/number--> s | <!--number:performance.scenarios[1].analyse_median_s-->0.017<!--/number--> s | <!--number:performance.scenarios[1].mislabelled_pct-->23.34<!--/number--> % |
+| <!--number:performance.scenarios[2].principals-->21,817<!--/number--> | <!--number:performance.scenarios[2].edges-->9,084,811<!--/number--> | <!--number:performance.scenarios[2].build_median_s-->713<!--/number--> s | <!--number:performance.scenarios[2].analyse_median_s-->0.829<!--/number--> s | <!--number:performance.scenarios[2].mislabelled_pct-->22.34<!--/number--> % |
 
 The mislabelled percentage barely moves across the range, which is what makes it
 a usable headline: it describes the account's hygiene rather than its size.
@@ -176,9 +176,9 @@ with edges rather than with principals:
 
 | Principals | Edges | Edges per principal | Build |
 | --- | --- | --- | --- |
-| 2,177 | 112,493 | 52 | 7.0 s |
-| 5,443 | 601,203 | 110 | 43.6 s |
-| 10,903 | 2,582,341 | 237 | 185.0 s |
+| 218 | 1,442 | 7 | 0.0743 s |
+| 2,177 | 112,493 | 52 | 7.15 s |
+| 21,817 | 9,084,811 | 416 | 713 s |
 
 Edge count grows faster than principal count, and that is a property of the
 account rather than an artefact of the tool. A principal allowed
@@ -187,10 +187,12 @@ for every user in the account, so doubling the account doubles that principal's
 out degree as well as the number of such principals. The graph is large because
 the blast radius is large.
 
-Memory is not the constraint: the 10,903 principal run peaked at 640MB, roughly
-190 bytes per edge, so an account producing ten million edges fits in about two
-gigabytes. Wall clock is. An account at that size takes several minutes to
-build, which is fine for a weekly audit and wrong for an incident.
+Memory is not the constraint: measured at roughly 190 bytes per edge, the
+9,084,811 edge graph fits in about two gigabytes. Wall clock is. That
+largest account takes 12 minutes to build and
+then answers reachability for every principal in
+0.83 seconds, which is the right trade for a weekly
+audit and the wrong one for an incident.
 
 The mitigation is already in the output rather than in a roadmap item. The one
 hop count is the number worth acting on first, every one of those paths is a

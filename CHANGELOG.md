@@ -51,7 +51,7 @@ The model and the graph.
 
 ### Added
 - Account model covering statements, explicit Deny, action and resource wildcards, group inheritance, managed policy versions and role trust policies.
-- Ten privilege escalation edge definitions, each with the actions it requires, the technique and why holding those actions grants the target's privileges.
+- Nine privilege escalation edge definitions, each with the actions it requires, the technique and why holding those actions grants the target's privileges.
 - Reachability graph construction with per edge preconditions.
 
 ### Fixed

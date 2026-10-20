@@ -83,7 +83,7 @@ whether a compromise is contained is transitive: can this principal reach
 administrative access, and how far does it have to go. Nobody answers that by
 reading policies, because the path runs through three principals and no single
 policy document contains it. This builds the privilege reachability graph from
-ten documented escalation primitives, reports which principals reach admin and
+nine documented escalation primitives, reports which principals reach admin and
 by which route, and ships as a container that holds no credentials and makes no
 AWS calls. On the bundled account, roughly a quarter of the principals somebody
 tagged least privilege reach administrative access anyway.
