@@ -48,6 +48,11 @@ class EdgeDefinition:
     # True when the edge needs iam:PassRole plus a service action, which is the
     # family people most often forget to model.
     needs_pass_role: bool = False
+    # The service principal that must appear in the target role's trust policy
+    # for this edge to work. Passing a role to Lambda is useless if the role
+    # does not trust lambda.amazonaws.com: the service cannot assume it and the
+    # escalation fails at the first step.
+    requires_service_trust: str | None = None
 
 
 DEFINITIONS: tuple[EdgeDefinition, ...] = (
@@ -97,9 +102,11 @@ DEFINITIONS: tuple[EdgeDefinition, ...] = (
         technique="Create a function running as the target role and invoke it.",
         rationale=(
             "The classic PassRole family. Each action alone is unremarkable, which is exactly why "
-            "this is missed: a reviewer looking at any one statement sees nothing wrong."
+            "this is missed: a reviewer looking at any one statement sees nothing wrong. The role "
+            "must trust lambda.amazonaws.com or the service cannot assume it."
         ),
         needs_pass_role=True,
+        requires_service_trust="lambda.amazonaws.com",
     ),
     EdgeDefinition(
         kind=EdgeKind.PASS_ROLE_TO_EC2,
@@ -107,9 +114,11 @@ DEFINITIONS: tuple[EdgeDefinition, ...] = (
         technique="Launch an instance with the target role as its instance profile.",
         rationale=(
             "Same family, and harder to spot because ec2:RunInstances is routinely granted to "
-            "developers who have no business assuming the roles they can pass."
+            "developers who have no business assuming the roles they can pass. The role must trust "
+            "ec2.amazonaws.com to be usable as an instance profile."
         ),
         needs_pass_role=True,
+        requires_service_trust="ec2.amazonaws.com",
     ),
     EdgeDefinition(
         kind=EdgeKind.UPDATE_ASSUME_ROLE_POLICY,
