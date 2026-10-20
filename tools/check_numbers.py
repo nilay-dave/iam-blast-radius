@@ -30,7 +30,17 @@ PATTERN = re.compile(r"<!--number:([a-zA-Z0-9_.\[\]]+)-->(.*?)<!--/number-->", r
 # skipped in silence, so a tagged number went unchecked while the run still
 # reported success.
 ANY_MARKER = re.compile(r"<!--number:([^>]*)-->")
-TOLERANCE = 0.05
+# A published figure is rounded for a reader, so the check allows the larger of
+# an absolute and a relative tolerance. Absolute alone is right for a percentage
+# and wrong for a duration: 713 seconds published against 712.742 measured is
+# correct rounding, not drift, and demanding 712.742 in a README would be
+# absurd precision presented as rigour.
+ABSOLUTE_TOLERANCE = 0.05
+RELATIVE_TOLERANCE = 0.005
+
+
+def tolerance_for(measured: float) -> float:
+    return max(ABSOLUTE_TOLERANCE, abs(measured) * RELATIVE_TOLERANCE)
 
 
 def resolve(payload: dict, dotted: str):
@@ -96,7 +106,7 @@ def check(readme: Path, metrics: Path) -> list[str]:
             try:
                 published_number = float(published_clean)
                 measured_number = float(measured)
-                if abs(published_number - measured_number) > TOLERANCE:
+                if abs(published_number - measured_number) > tolerance_for(measured_number):
                     failures.append(
                         f"{where}: {path} says {published}, measured {normalise(measured)}"
                     )
