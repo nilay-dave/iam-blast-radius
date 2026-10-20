@@ -301,7 +301,7 @@ edge needs two tests, one asserting it appears and one asserting it does not whe
 a precondition is missing, and the second half is what catches an edge that
 reaches everybody.
 
-Fixes: [`SERVICETRUST`](../../commit/SERVICETRUST), [`ROLLBACK`](../../commit/ROLLBACK), [`ADMINEQ`](../../commit/ADMINEQ).
+Fixes: [`43f17fc`](../../commit/43f17fc), [`c2666f8`](../../commit/c2666f8), [`95c3dca`](../../commit/95c3dca).
 
 ## Future work
 
