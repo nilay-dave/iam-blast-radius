@@ -2,12 +2,6 @@
 
 **Computes IAM privilege reachability from policies and trust. On the bundled account, <!--number:analysis.mislabelled_pct-->29.6<!--/number--> percent of principals labelled least privilege reach administrative access anyway.**
 
-[![ci](https://github.com/__GITHUB_USERNAME__/iam-blast-radius/actions/workflows/ci.yml/badge.svg)](https://github.com/__GITHUB_USERNAME__/iam-blast-radius/actions/workflows/ci.yml)
-[![coverage](https://img.shields.io/endpoint?url=https://__GITHUB_USERNAME__.github.io/iam-blast-radius/badges/coverage.json)](https://github.com/__GITHUB_USERNAME__/iam-blast-radius/actions/workflows/coverage-badge.yml)
-[![least-privilege roles reaching admin](https://img.shields.io/endpoint?url=https://__GITHUB_USERNAME__.github.io/iam-blast-radius/badges/mislabelled.json)](docs/metrics.json)
-[![image](https://img.shields.io/badge/ghcr.io-iam--blast--radius-blue)](https://github.com/__GITHUB_USERNAME__/iam-blast-radius/pkgs/container/iam-blast-radius)
-[![docs](https://img.shields.io/badge/docs-mkdocs%20material-blue)](https://__GITHUB_USERNAME__.github.io/iam-blast-radius/)
-[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## What this solves
 
