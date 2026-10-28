@@ -1,0 +1,1688 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IAM blast radius</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #141617; --muted: #4a5154; --line: #d8dcde;
+    --panel: #f5f6f7; --bad: #96201a; --warn: #6f4800; --ok: #17593a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121415; --fg: #e8eaeb; --muted: #9aa2a5; --line: #2a2e30;
+      --panel: #1a1d1e; --bad: #ef6a5f; --warn: #d79b2b; --ok: #4fb183;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--muted); margin: 40px 0 12px; font-weight: 600; }
+  .sub { color: var(--muted); margin: 0 0 28px; font-size: 13px; }
+  .headline { border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px;
+    background: var(--panel); margin-bottom: 20px; }
+  .big { font-size: 42px; font-weight: 650; line-height: 1; color: var(--bad);
+    font-variant-numeric: tabular-nums; }
+  .big small { font-size: 19px; font-weight: 500; }
+  .headline p { margin: 10px 0 0; max-width: 68ch; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 10px; }
+  .tile { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .tile .n { font-size: 23px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tile .l { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  caption { text-align: left; font-size: 12.5px; color: var(--muted); padding-bottom: 10px; }
+  th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); border-bottom: 1px solid var(--line); padding: 8px 10px 8px 0; font-weight: 600; }
+  td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--line); vertical-align: top;
+    font-variant-numeric: tabular-nums; }
+  code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+  .path { color: var(--muted); font-size: 12px; margin-top: 3px; word-break: break-word; }
+  .v { font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+  .v::before { margin-right: 6px; }
+  .v-admin { color: var(--bad); }
+  .v-admin::before { content: "A"; }
+  .v-reaches { color: var(--warn); }
+  .v-reaches::before { content: "!"; }
+  .v-contained { color: var(--ok); }
+  .v-contained::before { content: "ok"; font-size: 10px; }
+  .tag { border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px;
+    font-size: 11.5px; color: var(--muted); margin-right: 4px; white-space: nowrap; }
+  .tag-claim { color: var(--bad); border-color: var(--bad); }
+  .skip { position: absolute; left: -9999px; }
+  .skip:focus { left: 8px; top: 8px; background: var(--bg); padding: 10px 14px;
+    border: 1px solid var(--line); border-radius: 6px; z-index: 10; }
+  footer { margin-top: 44px; padding-top: 16px; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<a class="skip" href="#findings">Skip to the findings table</a>
+<div class="wrap">
+  <h1>IAM blast radius</h1>
+  <p class="sub">
+    Account 111122223333. 2,197 principals,
+    reachability computed to 3 hops.
+  </p>
+
+  <div class="headline">
+    <div class="big" role="img"
+         aria-label="29.6 percent of principals labelled least privilege reach administrative access">
+      29.6<small>%</small>
+    </div>
+    <p>
+      of the 931 principals somebody labelled least privilege can
+      reach an administrative action within 3 hops. A label records what was
+      intended. This records what is true.
+    </p>
+  </div>
+
+  <div class="grid" role="list" aria-label="Headline figures">
+    <div class="tile" role="listitem">
+      <div class="n">262</div>
+      <div class="l">already administrative</div>
+    </div>
+    <div class="tile" role="listitem">
+      <div class="n">405</div>
+      <div class="l">reach admin by escalation</div>
+    </div>
+    <div class="tile" role="listitem">
+      <div class="n">20.9%</div>
+      <div class="l">of non admin principals</div>
+    </div>
+    <div class="tile" role="listitem">
+      <div class="n">0</div>
+      <div class="l">reach admin only through a condition</div>
+    </div>
+  </div>
+
+  <h2>By hop count</h2>
+  <table>
+    <caption>
+      One hop is a single escalation step. The one hop set is what gets contained first, because
+      each one is a single statement to remove.
+    </caption>
+    <thead><tr><th>Hops to admin</th><th>Principals</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>229</td></tr>
+      <tr><td>2</td><td>124</td></tr>
+      <tr><td>3</td><td>52</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="findings">Principals</h2>
+  <table>
+    <caption>
+      Sorted by hops to admin, nearest first.
+Showing 100 of 2,197; the
+      full set is in the JSON output.    </caption>
+    <thead>
+      <tr><th>Principal</th><th>Type</th><th>Status</th><th>Hops</th><th>First steps</th><th>Labels</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <code>user/app-0013</code>
+          <div class="path">user/app-0013 to role/admin-060</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0022</code>
+          <div class="path">user/app-0022 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0027</code>
+          <div class="path">user/app-0027 to group/privileged-004</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0042</code>
+          <div class="path">user/app-0042 to role/admin-038</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0048</code>
+          <div class="path">user/app-0048 to role/admin-073</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0053</code>
+          <div class="path">user/app-0053 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0060</code>
+          <div class="path">user/app-0060 to user/app-0092</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0074</code>
+          <div class="path">user/app-0074 to role/admin-049</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0097</code>
+          <div class="path">user/app-0097 to user/app-0806</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0118</code>
+          <div class="path">user/app-0118 to user/app-0387</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0119</code>
+          <div class="path">user/app-0119 to group/privileged-003</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0142</code>
+          <div class="path">user/app-0142 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0150</code>
+          <div class="path">user/app-0150 to role/admin-030</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0165</code>
+          <div class="path">user/app-0165 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0170</code>
+          <div class="path">user/app-0170 to group/privileged-009</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0174</code>
+          <div class="path">user/app-0174 to group/privileged-012</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0175</code>
+          <div class="path">user/app-0175 to role/admin-063</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0199</code>
+          <div class="path">user/app-0199 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0203</code>
+          <div class="path">user/app-0203 to role/admin-058</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0204</code>
+          <div class="path">user/app-0204 to role/admin-075</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0207</code>
+          <div class="path">user/app-0207 to group/privileged-016</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0209</code>
+          <div class="path">user/app-0209 to role/admin-011</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0219</code>
+          <div class="path">user/app-0219 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0221</code>
+          <div class="path">user/app-0221 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0233</code>
+          <div class="path">user/app-0233 to user/app-0469</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0247</code>
+          <div class="path">user/app-0247 to user/app-0980</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0249</code>
+          <div class="path">user/app-0249 to user/app-1366</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0257</code>
+          <div class="path">user/app-0257 to role/admin-070</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0260</code>
+          <div class="path">user/app-0260 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0270</code>
+          <div class="path">user/app-0270 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0273</code>
+          <div class="path">user/app-0273 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0290</code>
+          <div class="path">user/app-0290 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0304</code>
+          <div class="path">user/app-0304 to user/app-0265</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0311</code>
+          <div class="path">user/app-0311 to role/admin-020</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0318</code>
+          <div class="path">user/app-0318 to group/privileged-000</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0333</code>
+          <div class="path">user/app-0333 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0338</code>
+          <div class="path">user/app-0338 to role/admin-046</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0351</code>
+          <div class="path">user/app-0351 to role/admin-000</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0353</code>
+          <div class="path">user/app-0353 to group/privileged-012</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0359</code>
+          <div class="path">user/app-0359 to user/app-1206</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0370</code>
+          <div class="path">user/app-0370 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0378</code>
+          <div class="path">user/app-0378 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0384</code>
+          <div class="path">user/app-0384 to role/admin-032</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0393</code>
+          <div class="path">user/app-0393 to role/admin-050</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0401</code>
+          <div class="path">user/app-0401 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0405</code>
+          <div class="path">user/app-0405 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0438</code>
+          <div class="path">user/app-0438 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0446</code>
+          <div class="path">user/app-0446 to role/admin-067</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0449</code>
+          <div class="path">user/app-0449 to role/admin-074</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0450</code>
+          <div class="path">user/app-0450 to user/app-1366</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0452</code>
+          <div class="path">user/app-0452 to role/admin-012</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0457</code>
+          <div class="path">user/app-0457 to group/privileged-017</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0458</code>
+          <div class="path">user/app-0458 to role/admin-050</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0459</code>
+          <div class="path">user/app-0459 to role/admin-074</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0461</code>
+          <div class="path">user/app-0461 to user/app-1251</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0476</code>
+          <div class="path">user/app-0476 to group/privileged-018</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0477</code>
+          <div class="path">user/app-0477 to role/admin-007</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0482</code>
+          <div class="path">user/app-0482 to role/admin-052</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0486</code>
+          <div class="path">user/app-0486 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0488</code>
+          <div class="path">user/app-0488 to role/admin-067</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0494</code>
+          <div class="path">user/app-0494 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0500</code>
+          <div class="path">user/app-0500 to group/privileged-001</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0520</code>
+          <div class="path">user/app-0520 to role/admin-067</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0547</code>
+          <div class="path">user/app-0547 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0550</code>
+          <div class="path">user/app-0550 to role/admin-041</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0565</code>
+          <div class="path">user/app-0565 to group/privileged-005</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0577</code>
+          <div class="path">user/app-0577 to user/app-1366</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0584</code>
+          <div class="path">user/app-0584 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0606</code>
+          <div class="path">user/app-0606 to user/app-0058</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0648</code>
+          <div class="path">user/app-0648 to role/admin-013</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0657</code>
+          <div class="path">user/app-0657 to group/privileged-006</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0659</code>
+          <div class="path">user/app-0659 to role/admin-014</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0663</code>
+          <div class="path">user/app-0663 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0684</code>
+          <div class="path">user/app-0684 to user/app-0618</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0704</code>
+          <div class="path">user/app-0704 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0705</code>
+          <div class="path">user/app-0705 to role/admin-028</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0710</code>
+          <div class="path">user/app-0710 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0713</code>
+          <div class="path">user/app-0713 to role/admin-028</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0738</code>
+          <div class="path">user/app-0738 to role/admin-016</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0753</code>
+          <div class="path">user/app-0753 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0754</code>
+          <div class="path">user/app-0754 to role/admin-003</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0765</code>
+          <div class="path">user/app-0765 to role/admin-033</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0766</code>
+          <div class="path">user/app-0766 to role/admin-049</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0772</code>
+          <div class="path">user/app-0772 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0773</code>
+          <div class="path">user/app-0773 to user/app-0732</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0783</code>
+          <div class="path">user/app-0783 to role/admin-023</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0796</code>
+          <div class="path">user/app-0796 to user/app-0265</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0798</code>
+          <div class="path">user/app-0798 to role/admin-045</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0800</code>
+          <div class="path">user/app-0800 to group/privileged-005</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0801</code>
+          <div class="path">user/app-0801 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0809</code>
+          <div class="path">user/app-0809 to group/privileged-007</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0816</code>
+          <div class="path">user/app-0816 to user/app-1247</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0829</code>
+          <div class="path">user/app-0829 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0832</code>
+          <div class="path">user/app-0832 to group/privileged-014</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0836</code>
+          <div class="path">user/app-0836 to user/app-1056</div>
+          <div class="path">
+create access key          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>165</td>
+        <td>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0848</code>
+          <div class="path">user/app-0848 to role/admin-047</div>
+          <div class="path">
+pass role to lambda          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:ml</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0853</code>
+          <div class="path">user/app-0853 to group/privileged-002</div>
+          <div class="path">
+add user to group          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:web</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0854</code>
+          <div class="path">user/app-0854 to role/admin-010</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0886</code>
+          <div class="path">user/app-0886 to role/admin-043</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag ">team:data</span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>user/app-0913</code>
+          <div class="path">user/app-0913 to role/admin-023</div>
+          <div class="path">
+pass role to ec2          </div>
+        </td>
+        <td>user</td>
+        <td class="v v-reaches">reaches</td>
+        <td>1</td>
+        <td>1</td>
+        <td>
+          <span class="tag tag-claim">least-privilege</span>
+          <span class="tag ">team:platform</span>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <footer>
+    Condition keys are recorded and not evaluated, so an edge that depends on one is included and
+    flagged rather than dropped: this tool over reports reachability rather than under reporting it.
+    Permission boundaries, service control policies and resource policies other than role trust are
+    out of scope.
+    When the account is the bundled synthetic one, every number here is a simulation.
+  </footer>
+</div>
+</body>
+</html>
